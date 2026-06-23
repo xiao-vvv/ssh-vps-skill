@@ -29,6 +29,20 @@ You can totally run the scripts by hand too, but what I really wanted was a gent
 
 ---
 
+## More than setup: let AI keep an eye on your boxes
+
+The real point isn't "setting up a new box" — it's that **once it's installed, your AI has a safe pair of hands that can reach every one of your boxes**. All the ops you're not quite sure how to do (or just don't feel like typing out) can go straight to it:
+
+- 🛡️ "Has this box been getting brute-forced? Any suspicious logins lately?"
+- 🌐 "Any weird outbound connections or suspicious processes right now?"
+- 📈 "Which process is eating all the CPU / memory?"
+- 🔌 "What ports are open on this box? Anything that shouldn't be?"
+- 🔄 "Update the system for me while you're at it~"
+
+Just say what you want — the AI connects through this skill, runs the commands, and tells you what it found. **In short: whatever you know how to do, don't know how to do, or just want done — you can let AI do it on your VPS.**
+
+---
+
 ## Install
 
 ### One-liner (recommended, easiest~)
