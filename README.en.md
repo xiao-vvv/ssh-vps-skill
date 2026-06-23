@@ -25,7 +25,7 @@ You can totally run the scripts by hand too, but what I really wanted was a gent
 - 📤 **Send the public key up in one step**: type the provider's password once and the key is appended to the remote `authorized_keys`
 - 🔒 **Disable password login, gently**: it **checks your key login actually works first, and won't touch anything if it can't get in**, so you'll never lock yourself out; it also tidies up those `sshd_config.d/` / cloud-init overrides and double-checks with `sshd -T` afterwards
 - 🩺 **See all your boxes at a glance**: bulk liveness, plus OS / kernel / CPU / memory / disk / uptime
-- 🧩 **Fuzzy alias matching**: type `tok` and it finds `tokyo-1`; if names clash it'll kindly ask you to be a bit more specific
+- 🧩 **Fuzzy alias matching**: type `tok` and it finds `tokyo-1`
 
 ---
 
