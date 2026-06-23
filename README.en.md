@@ -12,7 +12,7 @@
 
 > Just gently tell your AI "add this new box for me and turn off password login~" — it'll take care of the rest, safely.
 
-It's not a heavy web panel, and you don't install it on the server. It's just a little **skill**: one `SKILL.md` plus two self-contained bash scripts. Drop it into your AI agent and it learns how to keep all your little boxes tidy and secure.
+It's just a little **skill**: one `SKILL.md` plus two self-contained bash scripts. Drop it into your AI agent and it learns how to keep all your little boxes tidy and secure — it runs on your own computer, nothing to install on the server side.
 
 You can totally run the scripts by hand too, but what I really wanted was a gentle helper where **you talk and it does the work**~
 
