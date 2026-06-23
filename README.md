@@ -94,16 +94,20 @@ ssh-keygen -t ed25519 -f ~/.ssh/vps -C "vps-key"
 ## 命令速查
 
 ```bash
+ssh-vps init-key                                                    # 首次：本地生成 ~/.ssh/vps（已存在则跳过）
 ssh-vps add <别名> <host> --user root --port 22 [--password '密码']  # 加/更新别名；带密码则同时下发公钥
 ssh-vps sync-key <别名|host> --password '密码'                       # 单独下发公钥
 ssh-vps <别名>                                                       # 直接连接（支持模糊匹配）
 ssh-vps <别名> htop                                                  # 跑远端命令（交互式自动分配 PTY）
-ssh-vps lock <别名>                                                  # 验证密钥后关闭远端密码登录
+ssh-vps lock <别名>                                                  # 验证密钥后关闭密码+键盘交互登录（含 sshd -t 防呆）
+ssh-vps port <别名> [端口]                                           # 改 SSH 端口（默认 20266，新旧并存+实测+失败回滚）
 ssh-vps list                                                         # 列出所有别名
 ssh-vps status --all                                                 # 批量探活
 ssh-vps info <别名>                                                  # 查远端系统信息
 ssh-vps rm <别名>                                                    # 删除别名
 ```
+
+> **端口和密钥都可自定义**：改端口默认目标是 `20266`，可显式传 `ssh-vps port <别名> 端口`，或用环境变量 `VPS_HARDEN_PORT` 改默认值；密钥路径默认 `~/.ssh/vps`，可用 `VPS_KEY_PATH` 指向你自己的密钥。其它可配置项见 [可配置项](#可配置项)。
 
 多行远端脚本用 `ssh-vps-run.sh`，避免嵌套引号地狱：
 
@@ -117,9 +121,22 @@ REMOTE
 
 ---
 
+## 可配置项
+
+| 配置 | 默认 | 怎么改 |
+|---|---|---|
+| 密钥路径 | `~/.ssh/vps` | 环境变量 `VPS_KEY_PATH` |
+| 连接端口 | `22` | `VPS_DEFAULT_PORT`，或每个别名的 `--port` |
+| 改端口目标 | `20266` | `VPS_HARDEN_PORT`，或 `port <别名> <端口>` |
+| 默认用户 | `root` | `VPS_DEFAULT_USER` |
+| 密码来源 | — | `--password` / `VPS_SSH_PASSWORD` / `--password-stdin` |
+
 ## 典型流程：从拿到新鸡到锁好
 
 ```bash
+# 0) 首次：本地生成专用密钥（已有则跳过）
+ssh-vps init-key
+
 # 1) 加进来 + 下发公钥（一步到位）
 ssh-vps add myvps 1.2.3.4 --user root --port 22 --password 'abcd1234'
 
@@ -128,6 +145,9 @@ ssh-vps myvps
 
 # 3) 能登之后，再关密码登录（关之前进不去绝不执行）
 ssh-vps lock myvps
+
+# 4) 可选：改 SSH 端口（默认 20266；注意先在服务商安全组放行新端口）
+ssh-vps port myvps
 ```
 
 ---

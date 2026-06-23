@@ -12,24 +12,30 @@ PUB_KEY_PATH="${VPS_PUBLIC_KEY_PATH:-$HOME/.ssh/vps.pub}"
 MANAGER_TAG="# SSH_VPS_MANAGE"
 DEFAULT_USER="${VPS_DEFAULT_USER:-root}"
 DEFAULT_PORT="${VPS_DEFAULT_PORT:-22}"
+# 'port' 命令默认改成的目标 SSH 端口（可用 VPS_HARDEN_PORT 覆盖，或命令行显式指定）
+DEFAULT_HARDEN_PORT="${VPS_HARDEN_PORT:-20266}"
 
 usage() {
   cat <<EOF
 Usage:
-  $SCRIPT_NAME add <alias> <host> [--user <user>] [--port <port>] [--password <password>]
+  $SCRIPT_NAME init-key
+  $SCRIPT_NAME add <alias> <host> [--user <user>] [--port <port>] [--password <pw>|--password-stdin]
   $SCRIPT_NAME rm <alias>
   $SCRIPT_NAME list
-  $SCRIPT_NAME sync-key <alias|host> [--user <user>] [--port <port>] [--password <password>]
+  $SCRIPT_NAME sync-key <alias|host> [--user <user>] [--port <port>] [--password <pw>|--password-stdin]
   $SCRIPT_NAME connect <alias|host[:port]|user@host[:port]> [remote-command...]
   $SCRIPT_NAME lock <alias>
+  $SCRIPT_NAME port <alias> [newport]
   $SCRIPT_NAME status [alias|--all]
   $SCRIPT_NAME info <alias>
   $SCRIPT_NAME help
 
 Notes:
-  - Default key: ${KEY_PATH}
-  - Default user: ${DEFAULT_USER}
-  - Default port: ${DEFAULT_PORT}
+  - Default key: ${KEY_PATH}   (override: VPS_KEY_PATH)
+  - Default user: ${DEFAULT_USER}   (override: VPS_DEFAULT_USER)
+  - Connect port default: ${DEFAULT_PORT}   (override: VPS_DEFAULT_PORT, or per-alias --port)
+  - 'port' target default: ${DEFAULT_HARDEN_PORT}   (override: VPS_HARDEN_PORT, or 'port <alias> <newport>')
+  - Password may also come from \$VPS_SSH_PASSWORD or --password-stdin (avoids leaking into ps/history)
   - Managed entries are written into ${SSH_CONFIG} (main file: ${SSH_MAIN_CONFIG})
   - Script auto-ensures: Include ~/.ssh/vps.config in ~/.ssh/config
   - Managed blocks always include IdentityAgent=/dev/null
@@ -47,6 +53,21 @@ ensure_keypair() {
     ssh-keygen -y -f "$KEY_PATH" > "$PUB_KEY_PATH"
   fi
   chmod 644 "$PUB_KEY_PATH"
+}
+
+init_key_cmd() {
+  if [[ -f "$KEY_PATH" ]]; then
+    echo "Key already exists: $KEY_PATH (not overwriting)"
+    ensure_keypair
+    echo "Public key: $PUB_KEY_PATH"
+    return 0
+  fi
+  mkdir -p "$(dirname "$KEY_PATH")"
+  ssh-keygen -t ed25519 -f "$KEY_PATH" -N "" -C "ssh-vps" >/dev/null
+  ensure_keypair
+  echo "OK: generated ed25519 keypair"
+  echo "  private: $KEY_PATH  (keep local, never share)"
+  echo "  public : $PUB_KEY_PATH"
 }
 
 ensure_ssh_config_layout() {
@@ -413,7 +434,7 @@ add_cmd() {
   [[ "$host" =~ [^a-zA-Z0-9.:_-] ]] && { echo "ERROR: host 含有不安全字符 (仅允许字母、数字、.:_-)" >&2; exit 2; }
   local user="$DEFAULT_USER"
   local port="$DEFAULT_PORT"
-  local password=""
+  local password="${VPS_SSH_PASSWORD:-}"
 
   shift 2
   while [[ $# -gt 0 ]]; do
@@ -421,6 +442,7 @@ add_cmd() {
       --user) shift; user="${1:-$DEFAULT_USER}" ;;
       --port) shift; port="${1:-$DEFAULT_PORT}"; [[ "$port" =~ ^[0-9]+$ ]] || { echo "ERROR: port 必须为数字" >&2; exit 2; } ;;
       --password) shift; password="${1:-}" ;;
+      --password-stdin) IFS= read -r password || true ;;
       *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
     esac
     shift
@@ -448,7 +470,7 @@ sync_cmd() {
   local target="${1:-}"
   local user="$DEFAULT_USER"
   local port="$DEFAULT_PORT"
-  local password=""
+  local password="${VPS_SSH_PASSWORD:-}"
 
   if [[ -z "$target" ]]; then
     usage; exit 2
@@ -460,6 +482,7 @@ sync_cmd() {
       --user) shift; user="${1:-$DEFAULT_USER}" ;;
       --port) shift; port="${1:-$DEFAULT_PORT}" ;;
       --password) shift; password="${1:-}" ;;
+      --password-stdin) IFS= read -r password || true ;;
       *) echo "Unknown option: $1" >&2; usage; exit 2 ;;
     esac
     shift
@@ -538,60 +561,202 @@ lock_cmd() {
   fi
   echo "OK: key login works."
 
-  echo "Disabling password authentication on remote..."
+  echo "Hardening sshd on remote (disable password + keyboard-interactive)..."
   ssh -o IdentityAgent=/dev/null -o IdentitiesOnly=yes -i "$KEY_PATH" -p "$port" "$user@$host" bash -s <<'REMOTE'
 set -e
 
-# Use sudo only when needed (skip if already root or sudo unavailable)
-if [ "$(id -u)" -eq 0 ]; then
-  SUDO=""
-elif command -v sudo >/dev/null 2>&1; then
-  SUDO="sudo"
-else
-  echo "ERROR: not root and sudo not available" >&2
-  exit 1
-fi
+if [ "$(id -u)" -eq 0 ]; then SUDO=""
+elif command -v sudo >/dev/null 2>&1; then SUDO="sudo"
+else echo "ERROR: not root and sudo not available" >&2; exit 1; fi
 
-# Use sshd -T to check the effective value (accounts for sshd_config.d/ overrides)
-EFFECTIVE=$(sshd -T 2>/dev/null | grep -i '^passwordauthentication ' | awk '{print $2}')
-if [ "$EFFECTIVE" = "no" ]; then
-  echo "Already locked: PasswordAuthentication is already no (effective)"
-  exit 0
-fi
+SSHD_CFG="/etc/ssh/sshd_config"
+DROPIN_DIR="/etc/ssh/sshd_config.d"
+TS=$(date +%Y%m%d%H%M%S)
+$SUDO cp "$SSHD_CFG" "$SSHD_CFG.ssh-vps.bak.$TS"
 
-# Fix sshd_config.d/ overrides first (e.g. cloud-init)
-if [ -d /etc/ssh/sshd_config.d ]; then
-  for f in /etc/ssh/sshd_config.d/*.conf; do
+# force "<directive> no": replace existing/commented line, else append
+set_no() {
+  local f="$1" d="$2"
+  if grep -qiE "^[[:space:]]*#?[[:space:]]*${d}([[:space:]]|$)" "$f"; then
+    $SUDO sed -i -E "s/^[[:space:]]*#?[[:space:]]*${d}([[:space:]].*)?$/${d} no/I" "$f"
+  else
+    echo "${d} no" | $SUDO tee -a "$f" >/dev/null
+  fi
+}
+
+# 1) neutralize password-enabling overrides in drop-ins (cloud-init etc.)
+if [ -d "$DROPIN_DIR" ]; then
+  for f in "$DROPIN_DIR"/*.conf; do
     [ -f "$f" ] || continue
-    if grep -qiE '^\s*PasswordAuthentication\s+yes' "$f"; then
-      $SUDO sed -i -E 's/^\s*PasswordAuthentication\s+yes/PasswordAuthentication no/i' "$f"
-      echo "Fixed override: $f"
-    fi
+    for d in PasswordAuthentication KbdInteractiveAuthentication ChallengeResponseAuthentication; do
+      if grep -qiE "^[[:space:]]*${d}[[:space:]]+yes" "$f"; then
+        $SUDO sed -i -E "s/^[[:space:]]*${d}[[:space:]]+yes/${d} no/I" "$f"
+        echo "Fixed override: $f ($d)"
+      fi
+    done
   done
 fi
 
-# Fix main sshd_config
-SSHD_CFG="/etc/ssh/sshd_config"
-$SUDO sed -i.bak -E 's/^#?\s*PasswordAuthentication\s+.*/PasswordAuthentication no/' "$SSHD_CFG"
-if ! grep -q '^PasswordAuthentication no' "$SSHD_CFG"; then
-  echo 'PasswordAuthentication no' | $SUDO tee -a "$SSHD_CFG" >/dev/null
+# 2) main config: disable all password-type auth, ensure pubkey on
+for d in PasswordAuthentication KbdInteractiveAuthentication ChallengeResponseAuthentication; do
+  set_no "$SSHD_CFG" "$d"
+done
+if grep -qiE "^[[:space:]]*#?[[:space:]]*PubkeyAuthentication([[:space:]]|$)" "$SSHD_CFG"; then
+  $SUDO sed -i -E "s/^[[:space:]]*#?[[:space:]]*PubkeyAuthentication([[:space:]].*)?$/PubkeyAuthentication yes/I" "$SSHD_CFG"
+else
+  echo "PubkeyAuthentication yes" | $SUDO tee -a "$SSHD_CFG" >/dev/null
 fi
 
-if command -v systemctl >/dev/null 2>&1; then
-  $SUDO systemctl restart sshd 2>/dev/null || $SUDO systemctl restart ssh 2>/dev/null
-else
-  $SUDO service sshd restart 2>/dev/null || $SUDO service ssh restart 2>/dev/null
-fi
-
-# Verify
-AFTER=$(sshd -T 2>/dev/null | grep -i '^passwordauthentication ' | awk '{print $2}')
-if [ "$AFTER" = "no" ]; then
-  echo "Done: password authentication disabled (verified)"
-else
-  echo "WARNING: password authentication may still be enabled" >&2
+# 3) test config BEFORE restart; restore + abort if broken (never restart a bad config)
+if ! $SUDO sshd -t 2>/tmp/.sshvps_t; then
+  echo "ERROR: sshd config test failed — restoring backup:" >&2
+  cat /tmp/.sshvps_t >&2
+  $SUDO cp "$SSHD_CFG.ssh-vps.bak.$TS" "$SSHD_CFG"
   exit 1
 fi
+
+# 4) restart
+if command -v systemctl >/dev/null 2>&1; then
+  $SUDO systemctl restart sshd 2>/dev/null || $SUDO systemctl restart ssh
+else
+  $SUDO service sshd restart 2>/dev/null || $SUDO service ssh restart
+fi
+
+# 5) verify effective values
+EFF=$($SUDO sshd -T 2>/dev/null || true)
+fail=0
+for k in passwordauthentication kbdinteractiveauthentication; do
+  v=$(printf '%s\n' "$EFF" | awk -v key="$k" 'tolower($1)==key{print $2; exit}')
+  [ "$v" = "no" ] || { echo "WARNING: $k is '${v:-unknown}' (expected no)" >&2; fail=1; }
+done
+[ "$fail" -eq 0 ] && echo "Done: password & keyboard-interactive auth disabled (verified)" || exit 1
 REMOTE
+}
+
+port_cmd() {
+  local target="${1:-}"
+  local newport="${2:-$DEFAULT_HARDEN_PORT}"
+  if [[ -z "$target" ]]; then
+    echo "Usage: $SCRIPT_NAME port <alias> [newport]   (default: $DEFAULT_HARDEN_PORT)" >&2
+    exit 2
+  fi
+  if ! [[ "$newport" =~ ^[0-9]+$ ]] || [ "$newport" -lt 1 ] || [ "$newport" -gt 65535 ]; then
+    echo "ERROR: newport 必须是 1-65535 的数字" >&2; exit 2
+  fi
+
+  local alias_hit resolved host port user
+  alias_hit=$(resolve_alias_fuzzy "$target")
+  if [[ "$alias_hit" == __AMBIGUOUS__:* ]]; then
+    echo "Ambiguous alias '$target': ${alias_hit#__AMBIGUOUS__:}" >&2; exit 2
+  fi
+  resolved=$(resolve_alias_host "$alias_hit")
+  if [[ -z "$resolved" || "$resolved" == "||" ]]; then
+    echo "Alias '$target' not found" >&2; exit 1
+  fi
+  IFS='|' read -r host port user <<< "$resolved"
+  port="${port:-22}"
+  user="${user:-$DEFAULT_USER}"
+
+  if [[ "$port" == "$newport" ]]; then
+    echo "Alias '$alias_hit' already on port $newport — nothing to do."; exit 0
+  fi
+
+  local sshbase=( -o StrictHostKeyChecking=accept-new -o PasswordAuthentication=no -o IdentityAgent=/dev/null -o IdentitiesOnly=yes -i "$KEY_PATH" )
+
+  echo "Changing SSH port for $alias_hit ($user@$host): $port -> $newport"
+
+  echo "[1/5] Verifying key login on current port $port..."
+  if ! ssh "${sshbase[@]}" -o ConnectTimeout=10 -p "$port" "$user@$host" "echo ok" >/dev/null 2>&1; then
+    echo "FAIL: key login on port $port failed. Fix key login first (sync-key)." >&2; exit 1
+  fi
+
+  echo "[2/5] Adding port $newport alongside $port (keeping $port as fallback)..."
+  if ! ssh "${sshbase[@]}" -p "$port" "$user@$host" OLD_PORT="$port" NEW_PORT="$newport" bash -s <<'REMOTE'
+set -e
+if [ "$(id -u)" -eq 0 ]; then SUDO=""
+elif command -v sudo >/dev/null 2>&1; then SUDO="sudo"
+else echo "ERROR: not root and sudo not available" >&2; exit 1; fi
+
+SSHD_CFG="/etc/ssh/sshd_config"
+DROPIN_DIR="/etc/ssh/sshd_config.d"
+TS=$(date +%Y%m%d%H%M%S)
+$SUDO cp "$SSHD_CFG" "$SSHD_CFG.ssh-vps-port.bak.$TS"
+
+# make our drop-in authoritative for Port
+$SUDO mkdir -p "$DROPIN_DIR"
+if ! grep -qE "^[[:space:]]*Include[[:space:]]+/etc/ssh/sshd_config\.d" "$SSHD_CFG"; then
+  TMP=$(mktemp)
+  { echo "Include /etc/ssh/sshd_config.d/*.conf"; cat "$SSHD_CFG"; } > "$TMP"
+  $SUDO install -m 644 "$TMP" "$SSHD_CFG"; rm -f "$TMP"
+fi
+# comment out any Port lines in main so only the drop-in controls it
+$SUDO sed -i -E "s/^([[:space:]]*Port[[:space:]]+.*)$/# ssh-vps disabled: \1/I" "$SSHD_CFG"
+# drop-in: listen on BOTH old and new
+printf '# Managed by ssh-vps (port change)\nPort %s\nPort %s\n' "$OLD_PORT" "$NEW_PORT" | $SUDO tee "$DROPIN_DIR/00-ssh-vps-port.conf" >/dev/null
+
+# open firewall for the new port
+if command -v ufw >/dev/null 2>&1; then $SUDO ufw allow "$NEW_PORT/tcp" >/dev/null 2>&1 || true; fi
+if command -v firewall-cmd >/dev/null 2>&1; then $SUDO firewall-cmd --permanent --add-port="$NEW_PORT/tcp" >/dev/null 2>&1 || true; $SUDO firewall-cmd --reload >/dev/null 2>&1 || true; fi
+command -v nft >/dev/null 2>&1 && echo "NOTE: nftables detected — open port $NEW_PORT in your ruleset manually if needed."
+
+if ! $SUDO sshd -t 2>/tmp/.sshvps_pt; then
+  echo "ERROR: sshd config test failed — restoring:" >&2; cat /tmp/.sshvps_pt >&2
+  $SUDO cp "$SSHD_CFG.ssh-vps-port.bak.$TS" "$SSHD_CFG"; $SUDO rm -f "$DROPIN_DIR/00-ssh-vps-port.conf"
+  exit 1
+fi
+if command -v systemctl >/dev/null 2>&1; then $SUDO systemctl restart sshd 2>/dev/null || $SUDO systemctl restart ssh; else $SUDO service sshd restart 2>/dev/null || $SUDO service ssh restart; fi
+echo "added"
+REMOTE
+  then
+    echo "FAIL: could not add new port on remote (config test failed / restored)." >&2; exit 1
+  fi
+
+  echo "[3/5] Testing connection on new port $newport..."
+  if ! ssh "${sshbase[@]}" -o ConnectTimeout=10 -p "$newport" "$user@$host" "echo ok" >/dev/null 2>&1; then
+    echo "FAIL: cannot reach $host on new port $newport." >&2
+    echo "      Most likely the provider's security-group/firewall blocks $newport. Rolling back..." >&2
+    ssh "${sshbase[@]}" -p "$port" "$user@$host" bash -s <<'REMOTE' || true
+if [ "$(id -u)" -eq 0 ]; then SUDO=""; elif command -v sudo >/dev/null 2>&1; then SUDO="sudo"; else SUDO=""; fi
+SSHD_CFG="/etc/ssh/sshd_config"; DROPIN_DIR="/etc/ssh/sshd_config.d"
+last=$(ls -1t "$SSHD_CFG".ssh-vps-port.bak.* 2>/dev/null | head -1)
+[ -n "$last" ] && $SUDO cp "$last" "$SSHD_CFG"
+$SUDO rm -f "$DROPIN_DIR/00-ssh-vps-port.conf"
+if $SUDO sshd -t 2>/dev/null; then
+  if command -v systemctl >/dev/null 2>&1; then $SUDO systemctl restart sshd 2>/dev/null || $SUDO systemctl restart ssh; else $SUDO service sshd restart 2>/dev/null || $SUDO service ssh restart; fi
+fi
+echo "rolled back"
+REMOTE
+    echo "Rolled back. Old port $port is still active; nothing changed." >&2
+    exit 1
+  fi
+
+  echo "[4/5] New port verified. Removing old port $port..."
+  if ! ssh "${sshbase[@]}" -p "$newport" "$user@$host" NEW_PORT="$newport" bash -s <<'REMOTE'
+set -e
+if [ "$(id -u)" -eq 0 ]; then SUDO=""
+elif command -v sudo >/dev/null 2>&1; then SUDO="sudo"
+else echo "ERROR: not root and sudo not available" >&2; exit 1; fi
+SSHD_CFG="/etc/ssh/sshd_config"; DROPIN_DIR="/etc/ssh/sshd_config.d"
+printf '# Managed by ssh-vps (port change)\nPort %s\n' "$NEW_PORT" | $SUDO tee "$DROPIN_DIR/00-ssh-vps-port.conf" >/dev/null
+if ! $SUDO sshd -t 2>/tmp/.sshvps_pt2; then
+  echo "ERROR: sshd config test failed on finalize:" >&2; cat /tmp/.sshvps_pt2 >&2; exit 1
+fi
+if command -v systemctl >/dev/null 2>&1; then $SUDO systemctl restart sshd 2>/dev/null || $SUDO systemctl restart ssh; else $SUDO service sshd restart 2>/dev/null || $SUDO service ssh restart; fi
+echo "finalized"
+REMOTE
+  then
+    echo "WARNING: finalize failed, but new port works; old port may still be open. Check manually." >&2
+  fi
+
+  echo "[5/5] Verifying new port still works after finalize..."
+  if ssh "${sshbase[@]}" -o ConnectTimeout=10 -p "$newport" "$user@$host" "echo ok" >/dev/null 2>&1; then
+    add_alias "$alias_hit" "$host" "$user" "$newport"
+    echo "OK: $alias_hit is now on port $newport (alias updated). Old port $port closed."
+    echo "Connect with: $SCRIPT_NAME $alias_hit"
+  else
+    echo "FAIL: new port stopped responding after finalize. Investigate on the provider console." >&2
+    exit 1
+  fi
 }
 
 status_cmd() {
@@ -692,6 +857,14 @@ main() {
     lock)
       shift
       lock_cmd "$@"
+      ;;
+    port)
+      shift
+      port_cmd "$@"
+      ;;
+    init-key|initkey|keygen)
+      shift
+      init_key_cmd "$@"
       ;;
     status)
       shift

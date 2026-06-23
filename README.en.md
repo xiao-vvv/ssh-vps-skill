@@ -94,16 +94,20 @@ You'll then have the private key `~/.ssh/vps` (**keep it local, never share it**
 ## Command reference
 
 ```bash
+ssh-vps init-key                                                    # first time: generate ~/.ssh/vps locally (skipped if it exists)
 ssh-vps add <alias> <host> --user root --port 22 [--password 'pw']  # add/update alias; with a password it also deploys the key
 ssh-vps sync-key <alias|host> --password 'pw'                        # deploy the public key only
 ssh-vps <alias>                                                      # connect directly (fuzzy matching supported)
 ssh-vps <alias> htop                                                 # run a remote command (interactive commands auto-allocate a PTY)
-ssh-vps lock <alias>                                                 # verify key login, then disable remote password login
+ssh-vps lock <alias>                                                 # verify key login, then disable password + keyboard-interactive (with sshd -t safety)
+ssh-vps port <alias> [port]                                         # change SSH port (default 20266; keeps both + tests + auto-rollback)
 ssh-vps list                                                         # list all aliases
 ssh-vps status --all                                                 # bulk liveness check
 ssh-vps info <alias>                                                 # show remote system info
 ssh-vps rm <alias>                                                   # remove an alias
 ```
+
+> **Port and key are configurable**: the port-change default target is `20266` — pass it explicitly with `ssh-vps port <alias> <port>` or change the default via `VPS_HARDEN_PORT`; the key path defaults to `~/.ssh/vps` and can point to your own key via `VPS_KEY_PATH`. See [Configuration](#configuration).
 
 For multi-line remote scripts use `ssh-vps-run.sh` to avoid nested-quote hell:
 
@@ -117,9 +121,22 @@ REMOTE
 
 ---
 
+## Configuration
+
+| Setting | Default | How to change |
+|---|---|---|
+| Key path | `~/.ssh/vps` | env `VPS_KEY_PATH` |
+| Connect port | `22` | `VPS_DEFAULT_PORT`, or per-alias `--port` |
+| Port-change target | `20266` | `VPS_HARDEN_PORT`, or `port <alias> <port>` |
+| Default user | `root` | `VPS_DEFAULT_USER` |
+| Password source | — | `--password` / `VPS_SSH_PASSWORD` / `--password-stdin` |
+
 ## Typical flow: from fresh box to locked down
 
 ```bash
+# 0) First time: generate the dedicated key locally (skipped if present)
+ssh-vps init-key
+
 # 1) Add it + deploy the key (in one go)
 ssh-vps add myvps 1.2.3.4 --user root --port 22 --password 'abcd1234'
 
@@ -128,6 +145,9 @@ ssh-vps myvps
 
 # 3) Once key login works, disable password login (refuses to run if it can't get in first)
 ssh-vps lock myvps
+
+# 4) Optional: change the SSH port (default 20266; open the new port in your provider's firewall first)
+ssh-vps port myvps
 ```
 
 ---
