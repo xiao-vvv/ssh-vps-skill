@@ -1,0 +1,15 @@
+# 永远不要把任何 SSH 私密文件提交进来 —— 兜底防呆
+*.pem
+*.key
+id_*
+vps
+vps.pub
+vps.config
+known_hosts*
+authorized_keys
+*.bak
+
+# 系统杂物
+.DS_Store
+*.swp
+*~
