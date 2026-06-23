@@ -29,7 +29,7 @@ EOF
 
 if [[ ${1:-} == "-h" || ${1:-} == "--help" || $# -lt 1 ]]; then
   usage
-  exit $([[ $# -lt 1 ]] && echo 2 || echo 0)
+  if [[ $# -lt 1 ]]; then exit 2; else exit 0; fi
 fi
 
 TARGET="$1"

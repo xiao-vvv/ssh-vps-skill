@@ -296,11 +296,12 @@ sync_pubkey_to_host() {
   ensure_keypair
 
   if [[ -z "$password" ]]; then
-    echo "sync-key requires --password" >&2
+    echo "sync-key requires a password (--password / \$VPS_SSH_PASSWORD / --password-stdin)" >&2
     return 1
   fi
 
-  local tmp_remote="/tmp/.vps_pub_$(date +%s)_$$"
+  local tmp_remote
+  tmp_remote="/tmp/.vps_pub_$(date +%s)_$$"
   PASS="$password" \
   REMOTE_HOST="$host" \
   REMOTE_USER="$user" \
@@ -671,8 +672,9 @@ port_cmd() {
   fi
 
   echo "[2/5] Adding port $newport alongside $port (keeping $port as fallback)..."
-  if ! ssh "${sshbase[@]}" -p "$port" "$user@$host" OLD_PORT="$port" NEW_PORT="$newport" bash -s <<'REMOTE'
+  if ! ssh "${sshbase[@]}" -p "$port" "$user@$host" bash -s -- "$port" "$newport" <<'REMOTE'
 set -e
+OLD_PORT="$1"; NEW_PORT="$2"
 if [ "$(id -u)" -eq 0 ]; then SUDO=""
 elif command -v sudo >/dev/null 2>&1; then SUDO="sudo"
 else echo "ERROR: not root and sudo not available" >&2; exit 1; fi
@@ -731,8 +733,9 @@ REMOTE
   fi
 
   echo "[4/5] New port verified. Removing old port $port..."
-  if ! ssh "${sshbase[@]}" -p "$newport" "$user@$host" NEW_PORT="$newport" bash -s <<'REMOTE'
+  if ! ssh "${sshbase[@]}" -p "$newport" "$user@$host" bash -s -- "$newport" <<'REMOTE'
 set -e
+NEW_PORT="$1"
 if [ "$(id -u)" -eq 0 ]; then SUDO=""
 elif command -v sudo >/dev/null 2>&1; then SUDO="sudo"
 else echo "ERROR: not root and sudo not available" >&2; exit 1; fi
