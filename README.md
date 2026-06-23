@@ -31,7 +31,21 @@
 
 ## 安装
 
-### Claude Code
+### 一键安装（推荐）
+
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/xiao-vvv/ssh-vps-skill/main/install.sh)
+```
+
+默认装到 `~/.claude/skills/ssh-vps-skill`（Claude Code 会自动识别）。想换目录：
+
+```bash
+SSH_VPS_SKILL_DIR=~/你的/skills/ssh-vps-skill bash <(curl -sL https://raw.githubusercontent.com/xiao-vvv/ssh-vps-skill/main/install.sh)
+```
+
+重复执行会自动 `git pull` 更新。
+
+### 手动安装（Claude Code）
 
 把整个目录放进你的 skills 目录即可：
 

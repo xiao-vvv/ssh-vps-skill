@@ -31,7 +31,21 @@ The underlying scripts also work by hand, but the real design goal is **"you spe
 
 ## Install
 
-### Claude Code
+### One-liner (recommended)
+
+```bash
+bash <(curl -sL https://raw.githubusercontent.com/xiao-vvv/ssh-vps-skill/main/install.sh)
+```
+
+Installs to `~/.claude/skills/ssh-vps-skill` by default (Claude Code picks it up automatically). To choose another directory:
+
+```bash
+SSH_VPS_SKILL_DIR=~/your/skills/ssh-vps-skill bash <(curl -sL https://raw.githubusercontent.com/xiao-vvv/ssh-vps-skill/main/install.sh)
+```
+
+Re-running updates in place via `git pull`.
+
+### Manual install (Claude Code)
 
 Drop the whole directory into your skills folder:
 
