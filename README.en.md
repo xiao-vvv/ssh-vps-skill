@@ -10,61 +10,55 @@
   <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20openclaw%20%C2%B7%20Codex-8A2BE2" alt="works with Claude Code / openclaw / Codex">
 </p>
 
-> Just tell your AI "add this new box and disable password login" — it safely handles the SSH bootstrap for you.
+> Just gently tell your AI "add this new box for me and turn off password login~" — it'll take care of the rest, safely.
 
-This is not a web panel, nor a heavy ops platform you install on the server. It's a **skill**: one `SKILL.md` plus two self-contained bash scripts. Drop it into your AI agent and the agent learns how to manage all your boxes in a unified, secure way.
+It's not a heavy web panel, and you don't install it on the server. It's just a little **skill**: one `SKILL.md` plus two self-contained bash scripts. Drop it into your AI agent and it learns how to keep all your little boxes tidy and secure.
 
-The underlying scripts also work by hand, but the real design goal is **"you speak plain language, the AI runs the scripts."**
+You can totally run the scripts by hand too, but what I really wanted was a gentle helper that works the **"you speak plainly, the AI does the running"** way~
 
 ---
 
-## What it does
+## What it can do
 
-- 🔑 **One key for every box** — all machines use the same `~/.ssh/vps`; no more one-key-per-host mess
-- 📇 **Alias management** — store IP / port / user as an alias in `~/.ssh/vps.config`, auto-`Include`d into `~/.ssh/config`, so even native `ssh <alias>` just works
-- 📤 **One-shot public-key deploy** — enter the provider's password once; the public key is appended to the remote `authorized_keys`
-- 🔒 **Safely disable password login** — **verifies key login works first and refuses to proceed if it doesn't**, so you never lock yourself out; also handles `sshd_config.d/` / cloud-init overrides and re-checks with `sshd -T`
-- 🩺 **Bulk liveness + info** — see at a glance which box is online; query OS / kernel / CPU / memory / disk / uptime
-- 🧩 **Fuzzy alias matching** — `tok` matches `tokyo-1`; ambiguous prefixes prompt you to be more specific
+- 🔑 **One key for all your boxes**: every machine uses the same `~/.ssh/vps`, so no more one-key-per-host headaches
+- 📇 **A little alias notebook**: store IP / port / user as an alias in `~/.ssh/vps.config`, auto-wired into `~/.ssh/config`, so even native `ssh <alias>` just works
+- 📤 **Send the public key up in one step**: type the provider's password once and the key is appended to the remote `authorized_keys`
+- 🔒 **Disable password login, gently**: it **checks your key login actually works first, and won't touch anything if it can't get in**, so you'll never lock yourself out; it also tidies up those `sshd_config.d/` / cloud-init overrides and double-checks with `sshd -T` afterwards
+- 🩺 **See the whole family at a glance**: bulk liveness, plus OS / kernel / CPU / memory / disk / uptime
+- 🧩 **Fuzzy alias matching**: type `tok` and it finds `tokyo-1`; if names clash it'll kindly ask you to be a bit more specific
 
 ---
 
 ## Install
 
-### One-liner (recommended)
+### One-liner (recommended, easiest~)
 
 ```bash
 bash <(curl -sL https://raw.githubusercontent.com/xiao-vvv/ssh-vps-skill/main/install.sh)
 ```
 
-Installs to `~/.claude/skills/ssh-vps-skill` by default (Claude Code picks it up automatically). To choose another directory:
+Installs to `~/.claude/skills/ssh-vps-skill` by default (Claude Code picks it up on its own). Want it somewhere else?
 
 ```bash
 SSH_VPS_SKILL_DIR=~/your/skills/ssh-vps-skill bash <(curl -sL https://raw.githubusercontent.com/xiao-vvv/ssh-vps-skill/main/install.sh)
 ```
 
-Re-running updates in place via `git pull`.
+Run the same command again later and it updates in place via `git pull`~
 
 ### Manual install (Claude Code)
 
-Drop the whole directory into your skills folder:
+Just drop the whole directory into your skills folder:
 
 ```bash
 git clone https://github.com/xiao-vvv/ssh-vps-skill.git ~/.claude/skills/ssh-vps-skill
 chmod +x ~/.claude/skills/ssh-vps-skill/scripts/*.sh
 ```
 
-Claude Code will pick up the skill automatically. Just give instructions in natural language, e.g.:
-
-> "Add the new box 1.2.3.4 as alias `myvps`, root password is `abcd1234`, then verify key login and disable password login."
-
-The AI follows the conventions in `SKILL.md` to call the scripts.
-
 ### Other shell-capable AI agents (openclaw / Codex, etc.)
 
-Any agent that can read files and run a shell can use it: put the repo somewhere the agent can reach, let it read `SKILL.md` to learn the command conventions, then have it call `scripts/ssh-vps.sh`.
+As long as the agent can read files and run commands: put the repo somewhere it can reach, let it read `SKILL.md` for the command conventions, then have it call `scripts/ssh-vps.sh`~
 
-### Manual use (no AI required)
+### Prefer it fully by hand (no AI needed)
 
 ```bash
 git clone https://github.com/xiao-vvv/ssh-vps-skill.git ~/ssh-vps-skill
@@ -74,25 +68,25 @@ alias ssh-vps='~/ssh-vps-skill/scripts/ssh-vps.sh'   # add to ~/.zshrc / ~/.bash
 
 ---
 
-## Requirements
+## A little prep before you start
 
-Runs on **your local machine** (macOS / Linux). Needs: `bash`, `python3`, `openssh` (usually preinstalled), and `expect` (only for the "deploy key with password" step).
+It runs on **your own computer** (macOS / Linux). It needs `bash`, `python3`, `openssh` (usually already there), and `expect` (only for the "deploy key with password" step).
 
 - macOS: `brew install expect`
 - Debian / Ubuntu: `apt install -y expect`
 
-**Do this once yourself first: generate the dedicated key** (the script will not generate it for you — it exits with an error if `~/.ssh/vps` is missing):
+**One thing to do yourself first: generate a dedicated key** (the script won't generate it for you — it'll gently remind you if `~/.ssh/vps` is missing):
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/vps -C "vps-key"
 ```
 
-You'll then have the private key `~/.ssh/vps` (**keep it local, never share it**) and the public key `~/.ssh/vps.pub` (safe to publish).
+Now you'll have the private key `~/.ssh/vps` (**keep this one to yourself, never share it~**) and the public key `~/.ssh/vps.pub` (this one is fine to publish).
 
-> **First-time note: the key, the SSH port, and the alias are all yours to set — nothing is forced:**
-> - **Key / public key**: defaults to `~/.ssh/vps`. To use an existing key, put it at that path or point `VPS_KEY_PATH=/your/key` at it.
+> **A first-time note: the key, the SSH port, and the alias are all yours to set however you like — nothing is mandatory:**
+> - **Key / public key**: defaults to `~/.ssh/vps`. Already have a key? Put it at that path, or point `VPS_KEY_PATH=/your/key` at it.
 > - **SSH port**: the connect port defaults to `22` (fresh boxes are usually on 22; override with `--port`); the `port` command's default target is `20266` — use `ssh-vps port <alias> <your-port>` or set `VPS_HARDEN_PORT`.
-> - **Alias**: the alias in `add <alias> <host>` is whatever you like (letters / digits / `.` / `_` / `-`), e.g. `tokyo-1`, `hk-bgp`.
+> - **Alias**: the alias in `add <alias> <host>` is totally up to you (letters / digits / `.` / `_` / `-`), e.g. `tokyo-1`, `hk-bgp`~
 
 ---
 
@@ -112,9 +106,9 @@ ssh-vps info <alias>                                                 # show remo
 ssh-vps rm <alias>                                                   # remove an alias
 ```
 
-> **Port and key are configurable**: the port-change default target is `20266` — pass it explicitly with `ssh-vps port <alias> <port>` or change the default via `VPS_HARDEN_PORT`; the key path defaults to `~/.ssh/vps` and can point to your own key via `VPS_KEY_PATH`. See [Configuration](#configuration).
+> **Port and key are yours to set~**: the port-change default target is `20266` — pass it explicitly with `ssh-vps port <alias> <port>` or change the default via `VPS_HARDEN_PORT`; the key path defaults to `~/.ssh/vps` and can point to your own key via `VPS_KEY_PATH`. See [Configuration](#configuration).
 
-For multi-line remote scripts use `ssh-vps-run.sh` to avoid nested-quote hell:
+For multi-line remote scripts, use `ssh-vps-run.sh` so you don't have to wrestle with nested quotes~
 
 ```bash
 ssh-vps-run.sh myvps <<'REMOTE'
@@ -137,32 +131,34 @@ REMOTE
 | Default user | `root` | `VPS_DEFAULT_USER` |
 | Password source | — | `--password` / `VPS_SSH_PASSWORD` / `--password-stdin` |
 
-## Typical flow: from fresh box to locked down
+---
+
+## The whole flow: from fresh box to locked down
 
 ```bash
-# 0) First time: generate the dedicated key locally (skipped if present)
+# 0) First time: generate the dedicated key locally (skip if you already have one)
 ssh-vps init-key
 
-# 1) Add it + deploy the key (in one go)
+# 1) Add it + send the key up (all in one)
 ssh-vps add myvps 1.2.3.4 --user root --port 22 --password 'abcd1234'
 
-# 2) Confirm key login works
+# 2) Check that key login works
 ssh-vps myvps
 
-# 3) Once key login works, disable password login (refuses to run if it can't get in first)
+# 3) Once it works, safely disable password login (it won't act if it can't get in)
 ssh-vps lock myvps
 
-# 4) Optional: change the SSH port (default 20266; open the new port in your provider's firewall first)
+# 4) Want to change the port? (default 20266; open the new port in your provider's firewall first~)
 ssh-vps port myvps
 ```
 
 ---
 
-## Security notes
+## A few security things I'd love you to keep in mind
 
-- The private key `~/.ssh/vps` must **never** be uploaded to a server, shared, or committed to any repo. This repo ships a `.gitignore` as a safety net, but verify it yourself.
-- This repo contains **no** real IPs / passwords / keys — your actual connection details live locally in `~/.ssh/vps.config` and `~/.ssh/vps*`, unrelated to this repo.
-- Before changing SSH config, `lock` verifies key login is usable — an intentional safety design. Still, always keep a working fallback login before any security change.
+- The private key `~/.ssh/vps` should **never** be uploaded to a server, shared, or committed to any repo. The repo ships a `.gitignore` as a safety net, but please double-check too~
+- The repo contains **no** real IPs / passwords / keys — your actual connection details live locally in `~/.ssh/vps.config` and `~/.ssh/vps*`, nothing to do with this repo.
+- Before changing SSH config, `lock` verifies your key login works — a little safety net I left on purpose. Still, always keep a working fallback login before any security change; better safe than sorry.
 
 ---
 
