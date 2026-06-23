@@ -2,12 +2,12 @@
 
 <h1 align="center">ssh-vps-skill</h1>
 
-<p align="center">一个给 <b>AI agent</b>（Claude Code / openclaw 等）用的 VPS SSH 管理技能</p>
+<p align="center">一个给 <b>AI agent</b>（Claude Code / openclaw / Codex 等）用的 VPS SSH 管理技能</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/shell-bash-121011?logo=gnu-bash&logoColor=white" alt="bash">
-  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20openclaw-8A2BE2" alt="works with Claude Code / openclaw">
+  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20openclaw%20%C2%B7%20Codex-8A2BE2" alt="works with Claude Code / openclaw / Codex">
 </p>
 
 > 让你对 AI 说一句「把这台新鸡加进来，再关掉密码登录」，它就帮你安全地搞定 SSH 初始化。
@@ -60,7 +60,7 @@ chmod +x ~/.claude/skills/ssh-vps-skill/scripts/*.sh
 
 AI 会按 `SKILL.md` 里的约定去调用脚本完成。
 
-### 其它能跑 shell 的 AI agent（openclaw 等）
+### 其它能跑 shell 的 AI agent（openclaw / Codex 等）
 
 任何能读文件 + 执行 shell 的 agent 都能用：把仓库放到 agent 可访问的目录，让它读 `SKILL.md` 了解命令约定，然后调用 `scripts/ssh-vps.sh`。
 

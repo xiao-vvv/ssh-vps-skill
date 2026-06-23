@@ -2,12 +2,12 @@
 
 <h1 align="center">ssh-vps-skill</h1>
 
-<p align="center">An SSH-based VPS management skill for <b>AI agents</b> (Claude Code / openclaw, etc.)</p>
+<p align="center">An SSH-based VPS management skill for <b>AI agents</b> (Claude Code / openclaw / Codex, etc.)</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT">
   <img src="https://img.shields.io/badge/shell-bash-121011?logo=gnu-bash&logoColor=white" alt="bash">
-  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20openclaw-8A2BE2" alt="works with Claude Code / openclaw">
+  <img src="https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20openclaw%20%C2%B7%20Codex-8A2BE2" alt="works with Claude Code / openclaw / Codex">
 </p>
 
 > Just tell your AI "add this new box and disable password login" — it safely handles the SSH bootstrap for you.
@@ -60,7 +60,7 @@ Claude Code will pick up the skill automatically. Just give instructions in natu
 
 The AI follows the conventions in `SKILL.md` to call the scripts.
 
-### Other shell-capable AI agents (openclaw, etc.)
+### Other shell-capable AI agents (openclaw / Codex, etc.)
 
 Any agent that can read files and run a shell can use it: put the repo somewhere the agent can reach, let it read `SKILL.md` to learn the command conventions, then have it call `scripts/ssh-vps.sh`.
 
