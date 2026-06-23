@@ -89,6 +89,11 @@ ssh-keygen -t ed25519 -f ~/.ssh/vps -C "vps-key"
 
 You'll then have the private key `~/.ssh/vps` (**keep it local, never share it**) and the public key `~/.ssh/vps.pub` (safe to publish).
 
+> **First-time note: the key, the SSH port, and the alias are all yours to set — nothing is forced:**
+> - **Key / public key**: defaults to `~/.ssh/vps`. To use an existing key, put it at that path or point `VPS_KEY_PATH=/your/key` at it.
+> - **SSH port**: the connect port defaults to `22` (fresh boxes are usually on 22; override with `--port`); the `port` command's default target is `20266` — use `ssh-vps port <alias> <your-port>` or set `VPS_HARDEN_PORT`.
+> - **Alias**: the alias in `add <alias> <host>` is whatever you like (letters / digits / `.` / `_` / `-`), e.g. `tokyo-1`, `hk-bgp`.
+
 ---
 
 ## Command reference
@@ -125,6 +130,7 @@ REMOTE
 
 | Setting | Default | How to change |
 |---|---|---|
+| Alias | none (you pick) | the name in `add <alias> <host>`; letters/digits/`.`/`_`/`-` |
 | Key path | `~/.ssh/vps` | env `VPS_KEY_PATH` |
 | Connect port | `22` | `VPS_DEFAULT_PORT`, or per-alias `--port` |
 | Port-change target | `20266` | `VPS_HARDEN_PORT`, or `port <alias> <port>` |

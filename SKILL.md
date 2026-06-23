@@ -108,8 +108,10 @@ bash skills/ssh_vps_manage/scripts/ssh-vps.sh info <alias>
 - 若你已在本会话里管理 VPS host，直接在别名方式添加即可，不再在技能内维护明文密码。
 - 对于历史 host，不需要密码配置的可直接用 `add`+`--password` 重新同步 key 后切到 key 登录。
 - 密钥优先本地 `~/.ssh/vps`。
+- **初次使用：密钥、SSH 端口、别名都可按需自定义，没有强制值。**
 - **可配置项**（均有默认值，按需用环境变量/参数覆盖）：
-  - 密钥路径：`VPS_KEY_PATH`（默认 `~/.ssh/vps`）
+  - 别名：`add <alias> <host>` 里自行命名（字母/数字/`.`/`_`/`-`）
+  - 密钥路径：`VPS_KEY_PATH`（默认 `~/.ssh/vps`，可指向你已有的密钥）
   - 默认连接端口：`VPS_DEFAULT_PORT`（默认 22）或每别名的 `--port`
   - `port` 目标端口：`VPS_HARDEN_PORT`（默认 20266）或 `port <alias> <newport>`
   - 默认用户：`VPS_DEFAULT_USER`（默认 root）
